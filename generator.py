@@ -2,8 +2,23 @@ import pandas as pd
 import numpy as np
 import os
 from WS import WeatherSimulator
-from HP import HouseProfile 
+from HP import HouseProfile
+import requests
+import json
 
+# --- KONFIGURÁCIÓ ---
+WEBHOOK_URL = "https://webhook.site/80ceec4e-52ca-4670-9dd5-93664542a88c"  # Cseréld ki a saját URL-edre
+OUTPUT_DIR = "haz_adatok"
+
+def trigger_webhook(payload):
+    headers = {'Content-Type': 'application/json'}
+    try:
+        response = requests.post(WEBHOOK_URL, json=payload, headers=headers)
+        return response.status_code
+    except Exception as e:
+        print(f"Webhook hiba: {e}")
+        return None
+    
 def run_simulation():
     # Mappa létrehozása a fájloknak
     output_dir = "haz_adatok"
@@ -26,7 +41,8 @@ def run_simulation():
         HouseProfile("Haz_5_Solar_Csalad", "family",  has_solar=True,  solar_kwp=6.0, base_load_kwh=0.05),
         HouseProfile("Haz_6_Solar_Egyedul", "single",  has_solar=True,  solar_kwp=4.0, base_load_kwh=0.03),
     ]
-    
+    all_houses_list = [] # Összes ház adatait gyűjtő lista a webhook payload-hoz
+
     for house in houses:
         df = pd.DataFrame({'timestamp': timestamps})
         df['house_id'] = house.name
@@ -82,10 +98,38 @@ def run_simulation():
         cols = ['consumption_kwh', 'generation_kwh', 'net_grid_flow', 'meter_import_kwh', 'meter_export_kwh']
         df[cols] = df[cols].round(6)
         
+        # Adatok hozzáadása az összes ház listájához a webhook-hoz
+        all_houses_list.append(df.copy())
+
         # Fájl mentése
         file_path = os.path.join(output_dir, f"{house.name}.csv")
         df.to_csv(file_path, index=False)
         print(f"Kész (mérőórákkal és szezonalitással): {house.name}")
+    # --- ÖSSZEFÉSÜLÉS (OLLÓZÁS) ---
+    
+    master_df = pd.concat(all_houses_list)
+    master_df = master_df.sort_values(by=['timestamp', 'house_id'])
+    
+    # Mentés egy nagy fájlba
+    master_file = os.path.join(OUTPUT_DIR, "osszes_haz_adat.csv")
+    master_df.to_csv(master_file, index=False)
+    print(f"\nMaster CSV elmentve: {master_file}")
 
+    # --- WEBHOOK KÜLDÉS ---
+    print("Webhook küldése folyamatban...")
+    master_df['timestamp'] = master_df['timestamp'].apply(lambda x: x.isoformat() if hasattr(x, 'isoformat') else str(x))
+    records = master_df.to_dict('records')
+    
+    # 6 ház * 96 negyedóra = 576 sor naponta
+    chunk_size = 576 
+    for i in range(0, len(records), chunk_size):
+        chunk = records[i : i + chunk_size]
+        payload = {
+            "type": "batch_update",
+            "data": chunk
+        }
+        status = trigger_webhook(payload)
+        if i % (chunk_size * 10) == 0: # Csak minden 10. napnál írjunk ki státuszt
+            print(f"  Feltöltés: {i}/{len(records)} sor... Status: {status}")
 if __name__ == "__main__":
     run_simulation()
