@@ -1,0 +1,13 @@
+services:
+  powermocker:
+    build: .
+    environment:
+      BACKEND_WEBHOOK_URL: http://backend:8000/webhook/powermocker
+    ports:
+      - "9000:9000"
+    networks:
+      - energy-net
+
+networks:
+  energy-net:
+    external: true

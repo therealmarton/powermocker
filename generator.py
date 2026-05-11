@@ -7,7 +7,11 @@ import requests
 import json
 
 # --- KONFIGURÁCIÓ ---
-WEBHOOK_URL = "https://webhook.site/80ceec4e-52ca-4670-9dd5-93664542a88c"  # Cseréld ki a saját URL-edre
+import os as _os
+WEBHOOK_URL = _os.environ.get(
+    "POWERMOCKER_WEBHOOK_URL",
+    "http://127.0.0.1:8000/webhook/powermocker",
+)
 OUTPUT_DIR = "haz_adatok"
 
 def trigger_webhook(payload):
