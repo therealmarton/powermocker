@@ -30,42 +30,43 @@ Mock adatok előállítása energiaelemzésekhez, napelemes rendszerek szimulác
 
 ---
 
-## Container + Webhook Streamer
+## Konténerizált webhook-streamer
 
-`webhook.py` exposes a small FastAPI service that replays
-`haz_adatok/osszes_haz_adat.csv` to the energy-community backend's
-`/webhook/powermocker` endpoint, one day-batch at a time. Run it as a
-container alongside the main app on a shared Podman network:
+A `webhook.py` egy kis FastAPI szolgáltatást indít, amely a
+`haz_adatok/osszes_haz_adat.csv` tartalmát továbbítja az
+energy-community backend `/webhook/powermocker` végpontjára,
+naponta egy adag (batch) felbontásban. Konténerként, a fő alkalmazás
+mellett futtatható közös Podman hálózaton:
 
 ```bash
-# from the energy_community repo root (creates the shared network once)
+# az energy_community repo gyökeréből (közös hálózat egyszeri létrehozása)
 podman network create energy-net
 podman compose up --build                                    # db + backend + frontend
 
-# from this directory
-podman compose up --build                                    # powermocker on :9000
+# ebből a könyvtárból
+podman compose up --build                                    # powermocker a 9000-es porton
 ```
 
-### Endpoints
+### Végpontok
 
-| Method | Path     | Body                                                 | Description                                        |
-|--------|----------|------------------------------------------------------|----------------------------------------------------|
-| POST   | `/start` | `{ "days": 30, "delay_ms": 500, "drop_first": true }`| Kicks off streaming in a background thread (202).  |
-| POST   | `/stop`  | —                                                    | Cancels an in-flight stream.                       |
-| GET    | `/status`| —                                                    | `{ running, current_day, total_days, sent, ... }`. |
-| GET    | `/health`| —                                                    | Liveness probe + resolved backend/CSV paths.       |
+| Metódus | Útvonal  | Test                                                 | Leírás                                                  |
+|---------|----------|------------------------------------------------------|---------------------------------------------------------|
+| POST    | `/start` | `{ "days": 30, "delay_ms": 500, "drop_first": true }`| Háttérszálon elindítja az adatküldést (202).            |
+| POST    | `/stop`  | —                                                    | Megszakítja a folyamatban lévő küldést.                 |
+| GET    | `/status`| —                                                    | `{ running, current_day, total_days, sent, ... }`.      |
+| GET    | `/health`| —                                                    | Életjelzés + feloldott backend- és CSV-útvonalak.       |
 
-`days: 0` (default) streams the whole CSV. `delay_ms` is the pause between
-day-batches (576 rows = 6 houses × 96 quarter-hours).
+A `days: 0` (alapértelmezett) az egész CSV-t küldi. A `delay_ms` a napi
+adagok közötti szünet (576 sor = 6 ház × 96 negyedóra).
 
-### Environment
+### Környezeti változók
 
-| Variable               | Default                                            |
+| Változó                | Alapérték                                          |
 |------------------------|----------------------------------------------------|
 | `BACKEND_WEBHOOK_URL`  | `http://backend:8000/webhook/powermocker`          |
 | `POWERMOCKER_CSV`      | `./haz_adatok/osszes_haz_adat.csv`                 |
 
-### Quick trigger
+### Gyors indítás
 
 ```bash
 curl -X POST http://localhost:9000/start \
